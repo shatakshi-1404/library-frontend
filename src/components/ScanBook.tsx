@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { identifyImage, type IdentifiedBook, type IdentifiedMetadata } from '../api/scan'
 import { searchLibrary } from '../db/library'
 import { addScannedBook, metadataToScannedBook, type ScannedBook } from '../scan'
+import { BookIcon, CameraIcon, UploadIcon, XIcon } from './Icons'
 
 interface BarcodeDetectorLike { detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>> }
 type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorLike
@@ -112,10 +113,79 @@ export function ScanBook({ onCancel, onAdded }: ScanBookProps) {
 
   async function confirm() { if (!result) return; setBusy(true); try { await addScannedBook(result); onAdded() } catch { setError('The book could not be saved locally.') } finally { setBusy(false) } }
 
-  return <section className="scan-panel"><div className="scan-heading"><div><span className="eyebrow">SCAN BOOK</span><h2>Identify a book</h2></div><button className="close-button" onClick={() => { stopCamera(); onCancel() }}>x</button></div>{result ? <div className="scan-confirmation">{result.metadata.cover_url && <img className="scan-cover" src={result.metadata.cover_url} alt="" />}<h3>{result.metadata.title || 'Untitled book'}</h3><p>{result.metadata.authors?.join(', ') || 'Unknown author'}</p><p className="scan-isbn">ISBN: {result.isbn}</p>{result.metadata.metadata_source && <p className="scan-source">Source: {result.metadata.metadata_source}</p>}<div className="form-actions"><button className="secondary" onClick={() => { setResult(null); setError('') }}>Scan again</button><button className="primary" onClick={() => void confirm()} disabled={busy}>{busy ? 'Saving...' : 'Add to library'}</button></div></div> : <><div className="camera-frame">{scanning ? <video ref={videoRef} className="camera-video" muted playsInline onLoadedData={() => { if (window.BarcodeDetector) detectorFrameRef.current = requestAnimationFrame(() => void detectFrame()) }} /> : <p>{detectorAvailable ? 'Start the camera to detect an ISBN locally.' : 'Barcode detection is unavailable. Start the camera and capture an image for identification.'}</p>}</div>{error && <p className="error">{error}</p>}{busy && <p className="scan-message">Identifying image...</p>}<div className="scan-actions">{scanning ? <button className="secondary" onClick={stopCamera}>Stop</button> : <button className="primary" onClick={() => void startCamera()}>Start scanning</button>}{scanning && <button className="primary" onClick={() => void identifyCapture()} disabled={busy}>Capture / Identify</button>}<button className="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>Upload photo</button><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={async (event) => {
-  const file = event.target.files?.[0]
-  if (!file) return
-  await identifyUploadedFile(file)
-  event.target.value = ''
-}} /></div><p className="scan-help">You can scan with the camera or upload a still image. The image is sent to the backend for ISBN identification.</p></>}</section>
+  async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await identifyUploadedFile(file)
+    event.target.value = ''
+  }
+
+  return (
+    <section className="scan-panel" aria-labelledby="scan-title">
+      <div className="panel-head">
+        <div>
+          <span className="eyebrow">SCAN BOOK</span>
+          <h2 id="scan-title">Identify a book</h2>
+        </div>
+        <button type="button" className="icon-btn" aria-label="Close scanner" onClick={() => { stopCamera(); onCancel() }}>
+          <XIcon />
+        </button>
+      </div>
+
+      {result ? (
+        <div className="scan-confirmation">
+          <div className="scan-cover">
+            {result.metadata.cover_url ? <img src={result.metadata.cover_url} alt="" /> : <BookIcon size={40} />}
+          </div>
+          <h3>{result.metadata.title || 'Untitled book'}</h3>
+          <p>{result.metadata.authors?.join(', ') || 'Unknown author'}</p>
+          <p className="scan-isbn">ISBN: {result.isbn}</p>
+          {result.metadata.metadata_source && <p className="scan-source">Source: {result.metadata.metadata_source}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => { setResult(null); setError('') }}>Scan again</button>
+            <button type="button" className="btn btn-primary" onClick={() => void confirm()} disabled={busy}>{busy ? 'Saving...' : 'Add to library'}</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="viewfinder">
+            {scanning ? (
+              <>
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  onLoadedData={() => { if (window.BarcodeDetector) detectorFrameRef.current = requestAnimationFrame(() => void detectFrame()) }}
+                />
+                <div className="guide" aria-hidden="true"><i /><i /><i /><i /><span className="laser" /></div>
+              </>
+            ) : (
+              <div className="viewfinder-idle">
+                <CameraIcon size={36} />
+                <span>
+                  {detectorAvailable
+                    ? 'Start the camera to detect an ISBN locally.'
+                    : 'Barcode detection is unavailable. Start the camera and capture an image for identification.'}
+                </span>
+              </div>
+            )}
+            {busy && <div className="viewfinder-busy" role="status">Identifying image...</div>}
+          </div>
+
+          {error && <p className="form-error" role="alert">{error}</p>}
+
+          <div className="scan-actions">
+            {scanning
+              ? <button type="button" className="btn btn-secondary" onClick={stopCamera}>Stop</button>
+              : <button type="button" className="btn btn-primary" onClick={() => void startCamera()}><CameraIcon size={16} />Start scanning</button>}
+            {scanning && <button type="button" className="btn btn-primary" onClick={() => void identifyCapture()} disabled={busy}>Capture / Identify</button>}
+            <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}><UploadIcon size={16} />Upload photo</button>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(event) => void onFileChange(event)} />
+          </div>
+          <p className="scan-help">You can scan with the camera or upload a still image. The image is sent to the backend for ISBN identification.</p>
+        </>
+      )}
+    </section>
+  )
 }
